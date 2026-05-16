@@ -2,6 +2,23 @@
 #include <string>
 #include <exception>
 
+#include "mlir/Dialect/Bufferization/Transforms/Passes.h"
+#include "mlir/Dialect/Linalg/Passes.h"
+#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
+#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
+#include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
+#include "mlir/Dialect/MemRef/Transforms/Passes.h"
+#include "mlir/Dialect/Bufferization/Transforms/OneShotAnalysis.h"
+#include "mlir/Dialect/Bufferization/Transforms/OneShotModuleBufferize.h"
+
+#include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
+
+#include "mlir/Dialect/Bufferization/Transforms/FuncBufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/Arith/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/TargetSelect.h"
@@ -23,7 +40,6 @@
 #include "onnx_parser.hpp"
 #include "mlir_codegen.hpp"
 
-#include "mlir/Pass/PassManager.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/LLVMContext.h"
@@ -69,6 +85,16 @@ int main(int argc, char** argv) {
         std::cout << "GraphViz representation saved to: " << OutputDot << "\n";
 
         mlir::MLIRContext context;
+
+        mlir::DialectRegistry bufRegistry;
+        
+        mlir::bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(bufRegistry);
+        
+        mlir::arith::registerBufferizableOpInterfaceExternalModels(bufRegistry);
+        mlir::linalg::registerBufferizableOpInterfaceExternalModels(bufRegistry);
+        mlir::tensor::registerBufferizableOpInterfaceExternalModels(bufRegistry);
+        
+        context.appendDialectRegistry(bufRegistry);
         compiler::MLIRCodegen codegen(context);
         mlir::OwningOpRef<mlir::ModuleOp> module = codegen.generate(graph);
 
@@ -84,9 +110,27 @@ int main(int argc, char** argv) {
         }
 
         mlir::PassManager pm(module->getContext());
+
+        pm.addPass(mlir::bufferization::createEmptyTensorToAllocTensorPass());
+
+        mlir::bufferization::OneShotBufferizationOptions bufferizationOptions;
+        bufferizationOptions.bufferizeFunctionBoundaries = true;
+        bufferizationOptions.allowReturnAllocs = true;
+        pm.addPass(mlir::bufferization::createOneShotBufferizePass(bufferizationOptions));
+        pm.addNestedPass<mlir::func::FuncOp>(mlir::createConvertLinalgToLoopsPass());
+ 
+        pm.addPass(mlir::createLowerAffinePass());
+
+        pm.addPass(mlir::memref::createExpandStridedMetadataPass());
+
+        pm.addPass(mlir::createConvertSCFToCFPass());
+
+        pm.addPass(mlir::createConvertControlFlowToLLVMPass());
         pm.addPass(mlir::createConvertFuncToLLVMPass());
         pm.addPass(mlir::createArithToLLVMConversionPass());
+        pm.addPass(mlir::createFinalizeMemRefToLLVMConversionPass());
 
+        pm.addPass(mlir::createReconcileUnrealizedCastsPass());
         if (mlir::failed(pm.run(*module))) {
             std::cerr << "Error: Failed to lower MLIR to LLVM dialect.\n";
             return EXIT_FAILURE;

@@ -13,11 +13,20 @@ TEST(ONNXParser, FileNotFound) {
 }
 
 TEST(ONNXParser, ParseFullModel) {
-    const std::string model_path = "data/full_model.onnx"; 
-    
+    std::string model_path = "data/full_model.onnx"; 
     std::ifstream f(model_path);
+    
     if (!f.good()) {
-        GTEST_SKIP() << "Model file " << model_path << " not found. Please run generate_onnx.py first.";
+        model_path = "../data/full_model.onnx";
+        f.open(model_path);
+    }
+    if (!f.good()) {
+        model_path = "../../data/full_model.onnx";
+        f.open(model_path);
+    }
+
+    if (!f.good()) {
+        GTEST_SKIP() << "Model file not found in any expected location. Please run generate_onnx.py first.";
     }
     f.close();
 

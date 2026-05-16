@@ -7,13 +7,16 @@
 #include <cstdint>
 
 namespace compiler {
-
 struct Attribute {
     std::vector<int64_t> ints;
     std::vector<float> floats;
     int64_t i_val = 0;
     float f_val = 0.0f;
     std::string s_val;
+};
+
+struct TensorInfo {
+    std::vector<int64_t> shape;
 };
 
 class Node {
@@ -34,7 +37,9 @@ class ComputationGraph {
 public:
     std::vector<std::shared_ptr<Node>> nodes; 
     std::vector<std::string> graph_inputs;    
-    std::vector<std::string> graph_outputs;  
+    std::vector<std::string> graph_outputs;
+    
+    std::unordered_map<std::string, TensorInfo> tensor_infos;
 
     void addNode(std::shared_ptr<Node> node) {
         nodes.push_back(std::move(node));

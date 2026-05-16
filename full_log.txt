@@ -1,0 +1,11 @@
+Loading ONNX model from: data/full_model.onnx
+Successfully parsed ONNX model. Nodes count: 7
+GraphViz representation saved to: graph.dot
+
+--- Generated MLIR ---
+----------------------
+
+--- Generated MLIR (LLVM Dialect) ---
+----------------------
+Successfully translated to LLVM IR.
+Assembly successfully generated in: output_asm.s

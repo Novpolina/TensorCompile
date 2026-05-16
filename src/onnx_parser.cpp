@@ -23,12 +23,32 @@ ComputationGraph ONNXParser::parse(const std::string& filepath) {
 
     const onnx::GraphProto& onnx_graph = model.graph();
 
+    auto extract_shape = [](const onnx::ValueInfoProto& info) {
+        TensorInfo t_info;
+        if (info.has_type() && info.type().has_tensor_type() && info.type().tensor_type().has_shape()) {
+            const auto& shape = info.type().tensor_type().shape();
+            for (int i = 0; i < shape.dim_size(); ++i) {
+                t_info.shape.push_back(shape.dim(i).dim_value());
+            }
+        }
+        return t_info;
+    };
+
     for (int i = 0; i < onnx_graph.input_size(); ++i) {
-        graph.graph_inputs.push_back(onnx_graph.input(i).name());
+        const auto& input = onnx_graph.input(i);
+        graph.graph_inputs.push_back(input.name());
+        graph.tensor_infos[input.name()] = extract_shape(input);
     }
 
     for (int i = 0; i < onnx_graph.output_size(); ++i) {
-        graph.graph_outputs.push_back(onnx_graph.output(i).name());
+        const auto& output = onnx_graph.output(i);
+        graph.graph_outputs.push_back(output.name());
+        graph.tensor_infos[output.name()] = extract_shape(output);
+    }
+
+    for (int i = 0; i < onnx_graph.value_info_size(); ++i) {
+        const auto& val_info = onnx_graph.value_info(i);
+        graph.tensor_infos[val_info.name()] = extract_shape(val_info);
     }
 
     for (int i = 0; i < onnx_graph.node_size(); ++i) {
